@@ -6,10 +6,19 @@ package proyecto1.simulador;
 
 public class Main {
     public static void main(String[] args) {
-        // Instanciar el SO
-        SistemaOperativo so = new SistemaOperativo();
-        
-        // Arrancar la simulación
-        so.iniciarSimulacion();
+        VentanaSimulacion ventana = new VentanaSimulacion();
+        SistemaOperativo so = new SistemaOperativo(ventana);
+
+        // Llamamos al método setAcciones con las dos funciones lambda
+        ventana.setAcciones(
+            e -> {
+                so.iniciarSimulacion();
+            }, 
+            e -> {
+                so.interrupcionEmergencia();
+            }
+        );
+
+        ventana.setVisible(true);
     }
 }

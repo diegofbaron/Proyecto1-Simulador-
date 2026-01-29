@@ -4,6 +4,7 @@
  */
 package estructuras;
 
+
 public class Lista<T> {
     private Nodo<T> pFirst;
     private int size;
@@ -13,35 +14,26 @@ public class Lista<T> {
         this.size = 0;
     }
 
-    public boolean esVacia() {
-        return pFirst == null;
-    }
+    public boolean esVacia() { return pFirst == null; }
 
-    // Insertar al final
     public void insertar(T dato) {
         Nodo<T> nuevo = new Nodo<>(dato);
-        if (esVacia()) {
-            pFirst = nuevo;
-        } else {
+        if (esVacia()) { pFirst = nuevo; } 
+        else {
             Nodo<T> aux = pFirst;
-            while (aux.getSiguiente() != null) {
-                aux = aux.getSiguiente();
-            }
+            while (aux.getSiguiente() != null) aux = aux.getSiguiente();
             aux.setSiguiente(nuevo);
         }
         size++;
     }
-    
-    // Eliminar un elemento específico (necesario para mover procesos entre estados)
+
     public void eliminar(T dato) {
         if (esVacia()) return;
-
         if (pFirst.getContenido() == dato) {
             pFirst = pFirst.getSiguiente();
             size--;
             return;
         }
-
         Nodo<T> aux = pFirst;
         while (aux.getSiguiente() != null) {
             if (aux.getSiguiente().getContenido() == dato) {
@@ -53,11 +45,14 @@ public class Lista<T> {
         }
     }
 
-    public int getSize() {
-        return size;
+    // --- NUEVOS MÉTODOS PARA EL SWAP ---
+    public T getUltimo() {
+        if (esVacia()) return null;
+        Nodo<T> aux = pFirst;
+        while (aux.getSiguiente() != null) aux = aux.getSiguiente();
+        return aux.getContenido();
     }
-    
-    public Nodo<T> getpFirst() {
-        return pFirst;
-    }
+
+    public int getSize() { return size; }
+    public Nodo<T> getpFirst() { return pFirst; }
 }

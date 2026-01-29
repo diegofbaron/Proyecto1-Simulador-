@@ -4,197 +4,139 @@
  */
 package proyecto1.simulador;
 
-import estructuras.Cola;
-import estructuras.Lista;
-import estructuras.Nodo;
-import java.util.Random;
+import estructuras.*;
+import java.util.Vector;
 
 public class SistemaOperativo {
+    private VentanaSimulacion ventana;
+    private Lista<PCB> colaListos = new Lista<>();
+    private Lista<PCB> colaBloqueados = new Lista<>();
+    private Lista<PCB> colaSuspendidos = new Lista<>(); // Representa el Disco (Swap)
+    private PCB procesoEnEjecucion = null;
+    private Reloj reloj;
+    private int contadorCiclos = 0;
+    private final int MAX_RAM = 5; 
 
-    // --- Estructuras de Datos del Kernel ---
-    private Cola<PCB> colaNuevos;          
-    private Lista<PCB> colaListos;         
-    private Lista<PCB> colaBloqueados;     
-    private Lista<PCB> colaTerminados;     
-    
-    // Ejecución
-    private PCB procesoEnEjecucion;        
-    private Reloj reloj;                   
-    private int contadorCiclos;            
-    
-    public SistemaOperativo() {
-        // Inicializar estructuras
-        this.colaNuevos = new Cola<>();
-        this.colaListos = new Lista<>();
-        this.colaBloqueados = new Lista<>();
-        this.colaTerminados = new Lista<>();
-        this.procesoEnEjecucion = null;
-        this.contadorCiclos = 0;
-        
-        // Reloj a 1000ms (1 segundo) para poder leer la consola
-        this.reloj = new Reloj(1000); 
-        this.reloj.setSistemaOperativo(this); 
-        
-        // Carga inicial
-        generarProcesosIniciales();
+    public SistemaOperativo(VentanaSimulacion ventana) {
+        this.ventana = ventana;
+        this.reloj = new Reloj(1000);
+        this.reloj.setSistemaOperativo(this);
+        generarProcesosPrueba();
     }
 
-    public void iniciarSimulacion() {
-        reloj.iniciar();
-        reloj.start(); 
-        System.out.println(">>> Sistema Operativo Iniciado y Corriendo...");
-    }
-
-    /**
-     * Ciclo principal del Kernel (Se ejecuta cada 'tic' del reloj)
-     */
     public synchronized void ejecutarCiclo() {
-        this.contadorCiclos++;
-        System.out.println("\n--- CICLO " + contadorCiclos + " ---");
-
-        // --- GENERADOR AUTOMÁTICO PARA PRUEBAS ---
-        // Si el ciclo es múltiplo de 12, creamos un proceso nuevo
-        // Esto evita que el sistema se quede "Ocioso" para siempre
-        if (contadorCiclos % 12 == 0) {
-            crearProcesoAleatorio();
-        }
-        // ------------------------------------------
-
-        // 1. Planificador a Largo Plazo: Nuevos -> Listos
-        checkColaNuevos();
-
-        // 2. Manejar Procesos Bloqueados (I/O)
-        checkColaBloqueados();
-
-        // 3. Planificador a Corto Plazo: CPU -> Proceso
+        contadorCiclos++;
+        manejarSwap(); 
+        verificarBloqueados();
         planificarCPU();
-        
-        // 4. Ejecutar Proceso Actual
-        ejecutarProcesoActual();
-    }
-    
-    // --- LÓGICA DE GESTIÓN ---
 
-    private void checkColaNuevos() {
-        while (!colaNuevos.esVacia()) {
-            PCB p = colaNuevos.desencolar();
-            p.setEstado(Estado.LISTO);
-            p.setTiempoLlegada(contadorCiclos); 
-            colaListos.insertar(p);
-            System.out.println("   [NUEVO -> LISTO] Entra a RAM: " + p.getNombre());
-        }
-    }
-    
-    private void checkColaBloqueados() {
-        if (colaBloqueados.esVacia()) return;
-
-        // Lista temporal para guardar los que terminan I/O
-        Lista<PCB> listosParaSalir = new Lista<>();
-        
-        Nodo<PCB> actual = colaBloqueados.getpFirst();
-        
-        while (actual != null) {
-            PCB p = actual.getContenido();
-            p.incrementarContadorES();
-            
-            // ¿Ya completó su tiempo de E/S?
-            if (p.getContadorES() >= p.getCiclosParaCompletarES()) {
-                p.resetContadorES();
-                p.setEstado(Estado.LISTO);
-                listosParaSalir.insertar(p); 
+        if (procesoEnEjecucion != null) {
+            procesoEnEjecucion.ejecutarInstruccion();
+            if (procesoEnEjecucion.haTerminado()) {
+                procesoEnEjecucion = null;
+            } else if (procesoEnEjecucion.debeBloquearse()) {
+                procesoEnEjecucion.setEstado(Estado.BLOQUEADO);
+                colaBloqueados.insertar(procesoEnEjecucion);
+                procesoEnEjecucion = null;
             }
-            actual = actual.getSiguiente();
         }
-        
-        // Mover los que terminaron de Bloqueados a Listos
-        Nodo<PCB> aMover = listosParaSalir.getpFirst();
-        while (aMover != null) {
-            PCB p = aMover.getContenido();
-            // Sacar de bloqueados
-            colaBloqueados.eliminar(p);
-            // Meter a listos
+        actualizarInterfaz();
+    }
+
+    private void manejarSwap() {
+        int enRam = colaListos.getSize() + colaBloqueados.getSize() + (procesoEnEjecucion != null ? 1 : 0);
+
+        // SWAP OUT: Si RAM llena, mover el último de Listos al Disco
+        while (enRam > MAX_RAM && !colaListos.esVacia()) {
+            PCB p = colaListos.getUltimo();
+            p.setEstado(Estado.LISTO_SUSPENDIDO);
+            colaListos.eliminar(p);
+            colaSuspendidos.insertar(p);
+            enRam--;
+        }
+
+        // SWAP IN: Si hay espacio, traer del Disco a la RAM
+        while (enRam < MAX_RAM && !colaSuspendidos.esVacia()) {
+            PCB p = colaSuspendidos.getpFirst().getContenido();
+            p.setEstado(Estado.LISTO);
+            colaSuspendidos.eliminar(p);
             colaListos.insertar(p);
-            System.out.println("   [BLOQ -> LISTO] " + p.getNombre() + " terminó I/O.");
-            aMover = aMover.getSiguiente();
+            enRam++;
+        }
+    }
+
+    public synchronized void interrupcionEmergencia() {
+        if (procesoEnEjecucion != null) {
+            procesoEnEjecucion.setEstado(Estado.BLOQUEADO);
+            colaBloqueados.insertar(procesoEnEjecucion);
+            procesoEnEjecucion = null;
+            actualizarInterfaz();
+        }
+    }
+
+    private void verificarBloqueados() {
+        if (colaBloqueados.esVacia()) return;
+        Nodo<PCB> aux = colaBloqueados.getpFirst();
+        Lista<PCB> listosParaVolver = new Lista<>();
+        while (aux != null) {
+            PCB p = aux.getContenido();
+            p.incrementarContadorES();
+            if (p.getContadorES() >= 3) listosParaVolver.insertar(p);
+            aux = aux.getSiguiente();
+        }
+        Nodo<PCB> n = listosParaVolver.getpFirst();
+        while (n != null) {
+            PCB p = n.getContenido();
+            p.resetContadorES();
+            colaBloqueados.eliminar(p);
+            colaListos.insertar(p);
+            n = n.getSiguiente();
         }
     }
 
     private void planificarCPU() {
-        // Algoritmo FCFS (First-Come, First-Served)
-        if (procesoEnEjecucion == null) {
-            if (!colaListos.esVacia()) {
-                PCB siguiente = colaListos.getpFirst().getContenido();
-                colaListos.eliminar(siguiente);
-                
-                procesoEnEjecucion = siguiente;
-                procesoEnEjecucion.setEstado(Estado.EJECUCION);
-                System.out.println("   [DISPATCH] CPU asignado a: " + procesoEnEjecucion.getNombre());
-            } else {
-                System.out.println("   [CPU] Ocioso (Esperando procesos...)");
-            }
-        }
-    }
-    
-    private void ejecutarProcesoActual() {
-        if (procesoEnEjecucion != null) {
-            procesoEnEjecucion.ejecutarInstruccion();
-            
-            System.out.println("   [EJECUCION] " + procesoEnEjecucion.getNombre() + 
-                               " | PC: " + procesoEnEjecucion.getProgramCounter() + 
-                               "/" + procesoEnEjecucion.getInstruccionesTotales());
-
-            // A. ¿Terminó?
-            if (procesoEnEjecucion.haTerminado()) {
-                terminarProceso(procesoEnEjecucion);
-                return;
-            }
-            
-            // B. ¿Bloqueo por E/S?
-            if (procesoEnEjecucion.debeBloquearse()) {
-                bloquearProceso(procesoEnEjecucion);
-            }
+        if (procesoEnEjecucion == null && !colaListos.esVacia()) {
+            procesoEnEjecucion = colaListos.getpFirst().getContenido();
+            colaListos.eliminar(procesoEnEjecucion);
+            procesoEnEjecucion.setEstado(Estado.EJECUCION);
         }
     }
 
-    private void terminarProceso(PCB p) {
-        p.setEstado(Estado.TERMINADO);
-        colaTerminados.insertar(p);
-        procesoEnEjecucion = null; 
-        System.out.println("   [TERMINADO] Proceso " + p.getNombre() + " finalizó.");
-    }
-    
-    private void bloquearProceso(PCB p) {
-        p.setEstado(Estado.BLOQUEADO);
-        colaBloqueados.insertar(p);
-        procesoEnEjecucion = null; 
-        System.out.println("   [EJEC -> BLOQ] Proceso " + p.getNombre() + " va a I/O.");
+    private void actualizarInterfaz() {
+        int ramCount = colaListos.getSize() + colaBloqueados.getSize() + (procesoEnEjecucion != null ? 1 : 0);
+        ventana.updateView(
+            contadorCiclos, 
+            procesoEnEjecucion, 
+            getNombres(colaListos), 
+            getNombres(colaBloqueados), 
+            getNombres(colaSuspendidos), 
+            ramCount
+        );
     }
 
-    // --- GENERADORES ---
-    
-    private void generarProcesosIniciales() {
-        for (int i = 0; i < 3; i++) { // Empezamos con 3
-            crearProcesoAleatorio();
+    private Vector<String> getNombres(Lista<PCB> lista) {
+        Vector<String> v = new Vector<>();
+        Nodo<PCB> aux = lista.getpFirst();
+        while(aux != null) {
+            v.add(aux.getContenido().getNombre() + " [ID:" + aux.getContenido().getId() + "]");
+            aux = aux.getSiguiente();
         }
+        return v;
     }
 
-    // Método auxiliar para crear 1 proceso extra (usado al inicio y durante la ejecución)
-    private void crearProcesoAleatorio() {
-        Random rand = new Random();
-        String nombre = "Proceso_" + contadorIdGlobal++; // Nombre simple
-        int instrucciones = rand.nextInt(30) + 5;
-        int prioridad = rand.nextInt(3) + 1; 
-        int deadline = rand.nextInt(100) + instrucciones;
+    private void generarProcesosPrueba() {
+        // Nombres en español para ambiente de satélite
+        String[] tareas = {
+            "Telemetría", "Cámara_RGB", "Antena_L", "Sensor_Temp", 
+            "Giroscopio", "Panel_Solar", "Enlace_Tierra", "Analisis_UV"
+        };
         
-        boolean tieneES = rand.nextBoolean();
-        int cicloES = (tieneES && instrucciones > 2) ? rand.nextInt(instrucciones - 2) + 1 : 0;
-        int duracionES = tieneES ? 3 : 0; // 3 ciclos de I/O
-        
-        PCB nuevo = new PCB(nombre, instrucciones, prioridad, deadline, tieneES, cicloES, duracionES);
-        colaNuevos.encolar(nuevo);
-        // System.out.println("   >>> [GENERADOR] Nuevo proceso en cola: " + nombre);
+        for(int i=0; i < tareas.length; i++) {
+            // Creamos 8 procesos (esto forzará el SWAP automáticamente ya que el límite es 5)
+            colaListos.insertar(new PCB(tareas[i], 15 + (i*2), 1, 100 + (i*10), (i%2==0), 5, 3));
+        }
     }
-    
-    // Pequeño contador para nombres únicos
-    private int contadorIdGlobal = 1;
+
+    public void iniciarSimulacion() { reloj.start(); reloj.iniciar(); ventana.deshabilitarBotonInicio(); }
 }
+    

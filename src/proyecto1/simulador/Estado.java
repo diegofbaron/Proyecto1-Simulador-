@@ -10,6 +10,6 @@ public enum Estado {
     EJECUCION,
     BLOQUEADO,
     TERMINADO,
-    LISTO_SUSPENDIDO,      // En memoria secundaria (disco)
-    BLOQUEADO_SUSPENDIDO   // En memoria secundaria (disco)
+    LISTO_SUSPENDIDO,      // En Memoria Secundaria (Disco / Swap)
+    BLOQUEADO_SUSPENDIDO   // En Memoria Secundaria (Disco / Swap)
 }
