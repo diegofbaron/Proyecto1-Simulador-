@@ -60,6 +60,9 @@ public class SistemaOperativo {
     
     // Control de estado del reloj
     private boolean relojIniciado = false;
+    
+    // Control de fin de simulación
+    private boolean simulacionTerminada = false;
 
     public SistemaOperativo(VentanaSimulacion ventana) {
         this.ventana = ventana;
@@ -110,6 +113,11 @@ public class SistemaOperativo {
     public void ejecutarCiclo() {
         semaforoCPU.acquire();
         try {
+            // Verificar si la simulación ya terminó
+            if (simulacionTerminada) {
+                return;
+            }
+            
             contadorCiclos++;
             modoKernel = true;
             
@@ -170,7 +178,13 @@ public class SistemaOperativo {
             // 8. Incrementar tiempo de espera de procesos en cola
             incrementarTiemposEspera();
             
-            // 9. Actualizar interfaz
+            // 9. Verificar si la simulación ha terminado
+            if (verificarFinSimulacion()) {
+                finalizarSimulacion();
+                return;
+            }
+            
+            // 10. Actualizar interfaz
             actualizarInterfaz();
             
         } finally {
@@ -178,6 +192,57 @@ public class SistemaOperativo {
         }
     }
     
+    /**
+     * Verifica si todos los procesos han terminado.
+     */
+    private boolean verificarFinSimulacion() {
+        // La simulación termina cuando:
+        // - No hay proceso en ejecución
+        // - Cola de listos vacía
+        // - Cola de bloqueados vacía
+        // - Cola de suspendidos listos vacía
+        // - Cola de suspendidos bloqueados vacía
+        // - Hay al menos un proceso terminado (para evitar terminar al inicio)
+        
+        return procesoEnEjecucion == null &&
+               colaListos.esVacia() &&
+               colaBloqueados.esVacia() &&
+               colaSuspendidosListos.esVacia() &&
+               colaSuspendidosBloqueados.esVacia() &&
+               !colaTerminados.esVacia();
+    }
+    
+    /**
+     * Finaliza la simulación y muestra resumen.
+     */
+    private void finalizarSimulacion() {
+        simulacionTerminada = true;
+        reloj.pausar();
+        
+        // Calcular deadlines cumplidos
+        int deadlinesFallidos = metricas.getProcesosFallidosDeadline();
+        int deadlinesCumplidos = metricas.getProcesosCompletados() - deadlinesFallidos;
+        
+        // Registrar eventos de finalización
+        registrarEvento("═══════════════════════════════════════");
+        registrarEvento("     ✓ SIMULACIÓN COMPLETADA");
+        registrarEvento("═══════════════════════════════════════");
+        registrarEvento("Total de ciclos: " + contadorCiclos);
+        registrarEvento("Procesos completados: " + colaTerminados.getSize());
+        registrarEvento("Deadlines cumplidos: " + deadlinesCumplidos);
+        registrarEvento("Deadlines fallidos: " + deadlinesFallidos);
+        registrarEvento("Uso promedio CPU: " + String.format("%.1f%%", metricas.getUsoCPU()));
+        registrarEvento("Tiempo espera promedio: " + String.format("%.2f", metricas.getTiempoEsperaPromedio()));
+        registrarEvento("═══════════════════════════════════════");
+        
+        // Actualizar interfaz con estado final
+        ventana.actualizarBotonesSimulacion(false);
+        actualizarInterfaz();
+        
+        // Notificar a la ventana que la simulación terminó
+        ventana.mostrarFinSimulacion(metricas, contadorCiclos, colaTerminados.getSize());
+    }
+
     private void verificarDeadlines() {
         semaforoColas.acquire();
         try {
@@ -590,6 +655,9 @@ public class SistemaOperativo {
         // Pausar el reloj
         reloj.pausar();
         
+        // Resetear bandera de simulación terminada
+        simulacionTerminada = false;
+        
         // Limpiar todas las colas
         semaforoColas.acquire();
         try {
@@ -641,4 +709,5 @@ public class SistemaOperativo {
     public int getCicloActual() { return contadorCiclos; }
     public String getPlanificadorActual() { return planificadorActual.getNombre(); }
     public boolean isModoKernel() { return modoKernel; }
+    public boolean isSimulacionTerminada() { return simulacionTerminada; }
 }

@@ -101,6 +101,10 @@ public class Metricas {
         return (double) sumaTiempoRetorno / procesosCompletados;
     }
     
+    public int getDeadlinesCumplidos() {
+        return procesosCompletados - procesosFallidosDeadline;
+    }
+    
     // Getters
     public int getProcesosCompletados() { return procesosCompletados; }
     public int getProcesosFallidosDeadline() { return procesosFallidosDeadline; }

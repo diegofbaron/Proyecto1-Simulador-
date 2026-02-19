@@ -9,6 +9,7 @@ import javax.swing.border.LineBorder;
 import javax.swing.border.TitledBorder;
 import java.awt.*;
 import java.awt.event.ActionListener;
+import javax.swing.JOptionPane;
 
 public class VentanaSimulacion extends JFrame {
     
@@ -525,5 +526,90 @@ public class VentanaSimulacion extends JFrame {
                 btnReiniciar.setVisible(true);
             }
         });
+    }
+
+    /**
+     * Muestra un diálogo informando que la simulación ha terminado.
+     * El diálogo se cierra automáticamente después de 5 segundos.
+     */
+    public void mostrarFinSimulacion(Metricas metricas, int ciclosTotales, int procesosCompletados) {
+        SwingUtilities.invokeLater(() -> {
+            // Calcular deadlines cumplidos
+            int deadlinesFallidos = metricas.getProcesosFallidosDeadline();
+            int deadlinesCumplidos = procesosCompletados - deadlinesFallidos;
+            
+            // Crear diálogo personalizado
+            JDialog dialogo = new JDialog(this, "Simulación Completada", false);
+            dialogo.setLayout(new BorderLayout());
+            dialogo.getContentPane().setBackground(COLOR_PANEL);
+            
+            // Panel principal
+            JPanel panelContenido = new JPanel(new BorderLayout(10, 10));
+            panelContenido.setBackground(COLOR_PANEL);
+            panelContenido.setBorder(BorderFactory.createEmptyBorder(20, 30, 20, 30));
+            
+            // Título
+            JLabel lblTitulo = new JLabel("✓ SIMULACIÓN COMPLETADA", SwingConstants.CENTER);
+            lblTitulo.setFont(new Font("SansSerif", Font.BOLD, 24));
+            lblTitulo.setForeground(COLOR_EXITO);
+            panelContenido.add(lblTitulo, BorderLayout.NORTH);
+            
+            // Métricas
+            JPanel panelMetricasDialog = new JPanel(new GridLayout(6, 1, 5, 5));
+            panelMetricasDialog.setBackground(COLOR_PANEL);
+            panelMetricasDialog.setBorder(BorderFactory.createEmptyBorder(15, 0, 15, 0));
+            
+            panelMetricasDialog.add(crearLabelDialogo("📊 Ciclos totales: " + ciclosTotales));
+            panelMetricasDialog.add(crearLabelDialogo("✓ Procesos completados: " + procesosCompletados));
+            panelMetricasDialog.add(crearLabelDialogo("✓ Deadlines cumplidos: " + deadlinesCumplidos));
+            panelMetricasDialog.add(crearLabelDialogo("✗ Deadlines fallidos: " + deadlinesFallidos));
+            panelMetricasDialog.add(crearLabelDialogo("⚡ Uso promedio CPU: " + String.format("%.1f%%", metricas.getUsoCPU())));
+            panelMetricasDialog.add(crearLabelDialogo("⏱ Tiempo espera promedio: " + String.format("%.2f ciclos", metricas.getTiempoEsperaPromedio())));
+            
+            panelContenido.add(panelMetricasDialog, BorderLayout.CENTER);
+            
+            // Mensaje de cierre automático
+            JLabel lblCierre = new JLabel("Este mensaje se cerrará automáticamente en 5 segundos...", SwingConstants.CENTER);
+            lblCierre.setFont(new Font("SansSerif", Font.ITALIC, 11));
+            lblCierre.setForeground(COLOR_CIAN);
+            panelContenido.add(lblCierre, BorderLayout.SOUTH);
+            
+            dialogo.add(panelContenido);
+            dialogo.pack();
+            dialogo.setLocationRelativeTo(this);
+            dialogo.setResizable(false);
+            
+            // Timer para cerrar automáticamente después de 5 segundos
+            Timer timerCierre = new Timer(5000, e -> {
+                dialogo.dispose();
+            });
+            timerCierre.setRepeats(false);
+            timerCierre.start();
+            
+            // Timer para actualizar el contador de segundos
+            final int[] segundosRestantes = {5};
+            Timer timerContador = new Timer(1000, e -> {
+                segundosRestantes[0]--;
+                if (segundosRestantes[0] > 0) {
+                    lblCierre.setText("Este mensaje se cerrará automáticamente en " + segundosRestantes[0] + " segundos...");
+                } else {
+                    ((Timer) e.getSource()).stop();
+                }
+            });
+            timerContador.start();
+            
+            // Mostrar diálogo
+            dialogo.setVisible(true);
+        });
+    }
+    
+    /**
+     * Crea un JLabel estilizado para el diálogo de fin de simulación.
+     */
+    private JLabel crearLabelDialogo(String texto) {
+        JLabel lbl = new JLabel(texto, SwingConstants.CENTER);
+        lbl.setFont(new Font("SansSerif", Font.PLAIN, 14));
+        lbl.setForeground(COLOR_BLANCO);
+        return lbl;
     }
 }
